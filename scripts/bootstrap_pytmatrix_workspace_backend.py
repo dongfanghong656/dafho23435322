@@ -67,7 +67,7 @@ def ensure_python_shim():
         "sys.modules.setdefault('distutils.msvccompiler', module)\n"
         "def _patched_get_msvcr(orig):\n"
         "    def inner():\n"
-        "        match = re.search(r'MSC v\\\\.(\\\\d{4})', sys.version)\n"
+        "        match = re.search(r'MSC v\\.(\\d{4})', sys.version)\n"
         "        if match:\n"
         "            msc_ver = int(match.group(1))\n"
         "            if 1900 <= msc_ver < 2000:\n"
