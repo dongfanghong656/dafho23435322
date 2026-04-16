@@ -49,6 +49,7 @@ jobs:
             base-devel
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-gcc-fortran
+            mingw-w64-ucrt-x86_64-tools
 
       - name: Show toolchain versions
         run: |
@@ -56,11 +57,32 @@ jobs:
           python -m pip --version
           gcc --version
           gfortran --version
+          dlltool --version
+          gendef --version
 
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip wheel
           python -m pip install "setuptools<60" "numpy<2" "scipy<1.12"
+
+      - name: Create MinGW import library for CPython
+        run: |
+          $dll = Join-Path $env:pythonLocation 'python310.dll'
+          $libs = Join-Path $env:pythonLocation 'libs'
+          $def = Join-Path $env:RUNNER_TEMP 'python310.def'
+          $implib = Join-Path $libs 'libpython310.a'
+          if (-not (Test-Path $dll)) {
+            throw "python310.dll not found at $dll"
+          }
+          Push-Location $env:RUNNER_TEMP
+          gendef $dll
+          Pop-Location
+          if (-not (Test-Path $def)) {
+            throw "gendef did not produce $def"
+          }
+          dlltool --dllname python310.dll --input-def $def --output-lib $implib
+          Get-ChildItem $libs | Where-Object { $_.Name -like 'python310*' -or $_.Name -like 'libpython310*' } `
+            | Select-Object Name, Length
 
       - name: Bootstrap source tree and build backend
         env:
