@@ -1,0 +1,105 @@
+name: Build pytmatrix backend
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-pytmatrix-backend.yml"
+      - "scripts/bootstrap_pytmatrix_workspace_backend.py"
+      - "scripts/diagnose_pytmatrix_backend.py"
+      - "scripts/oct_nonspherical_psf_solver.py"
+      - "scripts/validate_oct_nonspherical_psf_solver.py"
+      - "vendor/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build-pytmatrix-backend.yml"
+      - "scripts/bootstrap_pytmatrix_workspace_backend.py"
+      - "scripts/diagnose_pytmatrix_backend.py"
+      - "scripts/oct_nonspherical_psf_solver.py"
+      - "scripts/validate_oct_nonspherical_psf_solver.py"
+      - "vendor/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-py310:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: powershell
+    env:
+      PYTHON_VERSION: "3.10"
+      MSYS2_ROOT: C:\msys64
+      PYTMATRIX_EXT_GLOB: vendor\pytmatrix-0.3.3\pytmatrix\fortran_tm\pytmatrix*
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Set up MSYS2 and Fortran toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gcc-fortran
+
+      - name: Show toolchain versions
+        run: |
+          python --version
+          python -m pip --version
+          & "$env:MSYS2_ROOT\ucrt64\bin\gcc.exe" --version
+          & "$env:MSYS2_ROOT\ucrt64\bin\gfortran.exe" --version
+
+      - name: Install Python build dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "numpy<2" "scipy<1.12"
+
+      - name: Bootstrap source tree and build backend
+        env:
+          CC: C:\msys64\ucrt64\bin\gcc.exe
+          CXX: C:\msys64\ucrt64\bin\g++.exe
+          FC: C:\msys64\ucrt64\bin\gfortran.exe
+        run: |
+          New-Item -ItemType Directory -Force -Path reports | Out-Null
+          python scripts/bootstrap_pytmatrix_workspace_backend.py `
+            --build-python "$env:pythonLocation\python.exe" `
+            --compiler mingw32 | Tee-Object -FilePath reports/pytmatrix-bootstrap.json
+
+      - name: Confirm compiled backend exists
+        run: |
+          $built = Get-ChildItem -Path 'vendor\pytmatrix-0.3.3\pytmatrix\fortran_tm' -Recurse -File `
+            | Where-Object { $_.Name -like 'pytmatrix*.pyd' -or $_.Name -like 'pytmatrix*.so' }
+          if (-not $built) {
+            throw 'Compiled pytmatrix backend not found.'
+          }
+          $built | Select-Object FullName, Length | ConvertTo-Json | Tee-Object -FilePath reports/pytmatrix-built-files.json
+
+      - name: Diagnose configured backend
+        run: |
+          python scripts/diagnose_pytmatrix_backend.py | Tee-Object -FilePath reports/pytmatrix-diagnose.json
+
+      - name: Run solver validation
+        run: |
+          python scripts/validate_oct_nonspherical_psf_solver.py | Tee-Object -FilePath reports/pytmatrix-validate.json
+
+      - name: Upload backend and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytmatrix-windows-py310
+          path: |
+            vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/pytmatrix*.pyd
+            vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/pytmatrix*.so
+            vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/*.pyf
+            reports/*.json
+          if-no-files-found: error
+          retention-days: 14
