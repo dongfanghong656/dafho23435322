@@ -50,6 +50,8 @@ def ensure_python_shim():
     SHIM_ROOT.mkdir(parents=True, exist_ok=True)
     shim_file = SHIM_ROOT / "sitecustomize.py"
     shim_file.write_text(
+        "import importlib\n"
+        "import re\n"
         "import sys, types\n"
         "module = types.ModuleType('distutils.msvccompiler')\n"
         "def get_build_version():\n"
@@ -62,7 +64,23 @@ def ensure_python_shim():
         "            setattr(module, name, getattr(_msvc, name))\n"
         "except Exception:\n"
         "    pass\n"
-        "sys.modules.setdefault('distutils.msvccompiler', module)\n",
+        "sys.modules.setdefault('distutils.msvccompiler', module)\n"
+        "def _patched_get_msvcr(orig):\n"
+        "    def inner():\n"
+        "        match = re.search(r'MSC v\\\\.(\\\\d{4})', sys.version)\n"
+        "        if match:\n"
+        "            msc_ver = int(match.group(1))\n"
+        "            if 1900 <= msc_ver < 2000:\n"
+        "                return ['vcruntime140']\n"
+        "        return orig()\n"
+        "    return inner\n"
+        "for modname in ('distutils.cygwinccompiler', 'setuptools._distutils.cygwinccompiler'):\n"
+        "    try:\n"
+        "        mod = importlib.import_module(modname)\n"
+        "        if hasattr(mod, 'get_msvcr'):\n"
+        "            mod.get_msvcr = _patched_get_msvcr(mod.get_msvcr)\n"
+        "    except Exception:\n"
+        "        pass\n",
         encoding="utf-8",
     )
     return shim_file
