@@ -59,8 +59,8 @@ jobs:
 
       - name: Install Python build dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "numpy<2" "scipy<1.12"
+          python -m pip install --upgrade pip wheel
+          python -m pip install "setuptools<70" "numpy<2" "scipy<1.12"
 
       - name: Bootstrap source tree and build backend
         env:
