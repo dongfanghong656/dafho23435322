@@ -34,13 +34,12 @@ jobs:
       PYTMATRIX_EXT_GLOB: vendor\pytmatrix-0.3.3\pytmatrix\fortran_tm\pytmatrix*
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
 
       - name: Set up MSYS2 and Fortran toolchain
         uses: msys2/setup-msys2@v2
