@@ -56,6 +56,8 @@ def ensure_python_shim():
         "import re\n"
         "import sys, types\n"
         "module = types.ModuleType('distutils.msvccompiler')\n"
+        "for key in ('lib', 'include', 'libpath', 'LIB', 'INCLUDE', 'LIBPATH'):\n"
+        "    os.environ.setdefault(key, '')\n"
         "def get_build_version():\n"
         "    return None\n"
         "def get_build_architecture():\n"
@@ -89,10 +91,35 @@ def ensure_python_shim():
         "for modname in ('distutils.cygwinccompiler', 'setuptools._distutils.cygwinccompiler'):\n"
         "    try:\n"
         "        mod = importlib.import_module(modname)\n"
+        "        if hasattr(mod, 'Mingw32CCompiler'):\n"
+        "            sys.modules.setdefault('distutils.mingw32ccompiler', mod)\n"
         "        if hasattr(mod, 'get_msvcr'):\n"
         "            mod.get_msvcr = _patched_get_msvcr(mod.get_msvcr)\n"
         "    except Exception:\n"
-        "        pass\n",
+        "        pass\n"
+        "try:\n"
+        "    import numpy.distutils.msvccompiler as _np_msvc\n"
+        "    _original_initialize = _np_msvc.MSVCCompiler.initialize\n"
+        "    def _patched_initialize(self):\n"
+        "        environ_lib = os.environ.get('lib', '')\n"
+        "        environ_include = os.environ.get('include', '')\n"
+        "        os.environ.setdefault('lib', environ_lib)\n"
+        "        os.environ.setdefault('include', environ_include)\n"
+        "        try:\n"
+        "            _np_msvc._MSVCCompiler.initialize(self)\n"
+        "        except Exception as exc:\n"
+        "            if exc.__class__.__name__ not in ('DistutilsPlatformError',):\n"
+        "                raise\n"
+        "        os.environ['lib'] = _np_msvc._merge(environ_lib, os.environ.get('lib', ''))\n"
+        "        os.environ['include'] = _np_msvc._merge(environ_include, os.environ.get('include', ''))\n"
+        "        if not getattr(self, 'lib', None):\n"
+        "            self.lib = 'lib.exe'\n"
+        "        if getattr(_np_msvc, 'platform_bits', None) == 32:\n"
+        "            self.compile_options += ['/arch:SSE2']\n"
+        "            self.compile_options_debug += ['/arch:SSE2']\n"
+        "    _np_msvc.MSVCCompiler.initialize = _patched_initialize\n"
+        "except Exception:\n"
+        "    pass\n",
         encoding="utf-8",
     )
     return shim_file
@@ -117,6 +144,7 @@ def attempt_build(build_python: Path, compiler: str | None = None):
     completed = subprocess.run(command, cwd=str(VENDOR_ROOT), capture_output=True, text=True, timeout=300, env=env)
     result["attempted"] = True
     result["shim"] = str(shim_file)
+    result["shim_preview"] = "\n".join(shim_file.read_text(encoding="utf-8").splitlines()[:120])
     result["command"] = command
     result["returncode"] = completed.returncode
     result["stdout_tail"] = "\n".join(completed.stdout.splitlines()[-40:])
