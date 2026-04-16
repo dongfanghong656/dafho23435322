@@ -90,7 +90,17 @@ jobs:
         run: |
           python scripts/validate_oct_nonspherical_psf_solver.py | Tee-Object -FilePath reports/pytmatrix-validate.json
 
-      - name: Upload backend and reports
+      - name: Upload diagnostics reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytmatrix-reports
+          path: |
+            reports/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload backend artifact
         uses: actions/upload-artifact@v4
         with:
           name: pytmatrix-windows-py310
@@ -98,6 +108,5 @@ jobs:
             vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/pytmatrix*.pyd
             vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/pytmatrix*.so
             vendor/pytmatrix-0.3.3/pytmatrix/fortran_tm/*.pyf
-            reports/*.json
           if-no-files-found: error
           retention-days: 14
